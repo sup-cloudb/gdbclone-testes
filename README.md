@@ -1,5 +1,15 @@
+### GDBCLONE 
+---------------------------------
+PM : Ruggero Citton - RAC Pack, Cloud Innovation and Solution Engineering Team
+
+GDBCLONE é uma ferramenta/orquestrador que serve para automatizar processos de clone/snap de bases de dados ORACLE. Em background os binarios de ACFS ( ACFSUTIL) e rman e sqlplus são utilizados.
+
+O DOC ID **gDBClone Powerful Database Clone/Snapshot Management Tool (Doc ID 2099214.1)**  contem todos os cenarios de CLONE/SNAP/CONVERSAO/MIGRACAO/UPGRADE a partir da version 3.0 lancada em 2016 contemplando bases a partir da 11g e com GRID INFRASTRUCTURE minimo 12c+.
+
+
 
 - **Instalacao do GDBCLONE** 
+
 
 > rpm -ivh gDBClone-4.0.0-3.el8.x86_64.rpm
 
@@ -70,7 +80,7 @@ _ @Sugestao : Pode-se criar 2 ACFS para servir de DATAACFS e outro para RECOACFS
 > 
 > 
 
-> ASMCMD>   volcreate -G DATA -s 100G VOL_SNAPS
+> ASMCMD>   volcreate -G DATA -s 100G VL_SNAP_DTA
 
 Para criar o outro volume no RECO, nao pode passar de 11 caracteres...
 
@@ -124,27 +134,27 @@ Diskgroup Name: RECO
 
 Formatar o device (ADVM) 
 
-> [root@dbtryh ~]# mkfs.acfs /dev/asm/vol_snaps-363
+> [root@dbtryh ~]# mkfs.acfs /dev/asm/vl_snap_dta-175
 > mkfs.acfs: version                   = 19.0.0.0.0
 > mkfs.acfs: on-disk version           = 46.0
-> mkfs.acfs: volume                    = /dev/asm/vol_snaps-363
+> mkfs.acfs: volume                    = /dev/asm/vl_snap_dta-175
 > mkfs.acfs: volume size               = 107374182400  ( 100.00 GB )
 > mkfs.acfs: Format complete.
 > 
 
-> [root@dbtryh ~]# mkfs.acfs /dev/asm/vol_recosnp-399
+> [root@dbtryh ~]# mkfs.acfs /dev/asm/vl_snap_rco-470
 
 ```
-[root@dbtryh ~]# mkfs.acfs /dev/asm/vol_recosnp-399
+[root@dbtryh ~]# mkfs.acfs /dev/asm/vl_snap_rco-470
 mkfs.acfs: version                   = 19.0.0.0.0
 mkfs.acfs: on-disk version           = 46.0
-mkfs.acfs: volume                    = /dev/asm/vol_recosnp-399
+mkfs.acfs: volume                    = /dev/asm/vl_snap_rco-470
 mkfs.acfs: volume size               = 53687091200  (  50.00 GB )
 
 
 ```
 [root@dbtryh ~]# mkdir /snapreco
-[root@dbtryh ~]# acfsutil registry -a /dev/asm/vol_recosnp-399 /snapreco
+[root@dbtryh ~]# acfsutil registry -a /dev/asm/vl_snap_rco-470 /snapreco
 acfsutil registry: mount point /snapreco successfully added to Oracle Registry
 
 
@@ -152,7 +162,7 @@ Criar o PATH e setar o OWNER para o usuario ORACLE :
 
 ```
 [root@dbtryh ~]# mkdir /snapdata
-[root@dbtryh ~]# chown -R oracle:oinstall /snapdbs
+[root@dbtryh ~]# chown -R oracle:oinstall /snapdata
 [root@dbtryh ~]# mount /dev/asm/vol_snaps-363 /snapdata
 [root@dbtryh ~]# mount.acfs /dev/asm/vol_snaps-363 /snapdata
 [root@dbtryh ~]# acfsutil registry -a /dev/asm/vol_snaps-363 /snapdata
@@ -308,6 +318,7 @@ Sempre verificar o SERVICE_NAME, se esta com sufixo no output do comando lsnrctl
 > -dataacfs /snapdbs \
 > -redoacfs /snapdbs \
 > -recoacfs /snapdbs \
+> --racmod 0 \
 > -syspwf /snapdbs/acfs_passwd/password_file
 INFO: 2025-06-26 23:20:51: Please check the logfile '/opt/gDBClone/out/log/gDBClone_45678.log' for more details
 
@@ -559,7 +570,7 @@ SUCCESS: 2025-06-27 07:46:36: ACFS snapshot 'GOLD' deleted
 Podemos escolher um DBNAME diferente da ORIGEM. O proprio GDBCLONE altera o dbname e o unique_name.
 
 ```
-[oracle@dbtryh ~]$ gdbclone clone -sdbname DB0626_jcj_gru.subnetapp.maquina.oraclevcn.com -sdbscan dbtryh-scan -tdbname GOLD -tdbhome OraDB19000_home1 -dataacfs /snapdbs -redoacfs /snapdbs -recoacfs /snapdbs -syspwf /snapdbs/acfs_passwd/password_file  -force
+[oracle@dbtryh ~]$ gdbclone clone -sdbname DB0626_jcj_gru.subnetapp.maquina.oraclevcn.com -sdbscan dbtryh-scan -tdbname GOLD -tdbhome OraDB19000_home1 -dataacfs /snapdbs -redoacfs /snapreco -recoacfs /snapdata -syspwf /snapdbs/acfs_passwd/password_file  -force
 INFO: 2025-06-27 07:52:21: Please check the logfile '/opt/gDBClone/out/log/gDBClone_44212.log' for more details
 
 │▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│
@@ -1100,13 +1111,24 @@ acfsutil snap delete: ACFS-03046: unable to perform snapshot operation on /acfs_
 [oracle@raia2host ~]$ exit
 logout
 
+
+- ### ALGUNS INSIGHTS & CASES : 
+
+
+- CASO 1 ) Nesses case o cliente tinha um EXADB-D (PRIMARY-PROD) em @AZURE e o ambiente EXADB-D( STANDBY - NAO PROD) em @GOOGLE E com uma base de 200 TB . 
+
+- [ ]               O step do CLONE fez 20TB/Hora ( rman duplicate) com 48 canais 
+- [ ]               Havia 1 tablespace em READ-ONLY, o que gerou um erro ao fazer o snapshot standby devido a criar um novo CONTROLFILE no processo e gerar uma nova incarnation, pois como o header de um datafile READ ONLY, nao permite alteração, não é possivel fazer . O workaround foi fazer de fato colocar a tablespace em RW para que o processo fosse concluido ou incluir uma trigger de AFTER STARTUP.
+
+- CASO 2 ) Com o GDBCLONE pode-se fazer um snap de um snap, portanto o cliente fez o masking de objetos no SNAP1 e  a partir dele foram realizados outros snaps com o masking nas tabelas.
+
+
+
 ```
 
 
 Entao tem que ser com o grid : 
 
-
-```
 [opc@raia2host ~]$ sudo su - grid
 Last login: Fri Jun  6 17:10:09 UTC 2025
 [grid@raia2host ~]$  /sbin/acfsutil snap delete GOLD1  /acfs_gdb
